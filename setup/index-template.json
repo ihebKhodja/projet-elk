@@ -1,0 +1,36 @@
+{
+  "index_patterns": ["ecommerce-logs-*"],
+  "priority": 200,
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0
+    },
+    "mappings": {
+      "dynamic_templates": [
+        {
+          "strings_as_keyword": {
+            "match_mapping_type": "string",
+            "mapping": { "type": "keyword", "ignore_above": 1024 }
+          }
+        }
+      ],
+      "properties": {
+        "@timestamp":       { "type": "date" },
+        "message":          { "type": "text" },
+        "error_message":    { "type": "text" },
+        "client_ip":        { "type": "ip" },
+        "status_code":      { "type": "short" },
+        "response_time_ms": { "type": "integer" },
+        "quantity":         { "type": "integer" },
+        "results_count":    { "type": "integer" },
+        "amount":           { "type": "float" },
+        "geoip": {
+          "properties": {
+            "location": { "type": "geo_point" }
+          }
+        }
+      }
+    }
+  }
+}

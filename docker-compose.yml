@@ -1,0 +1,104 @@
+name: elk-ecommerce
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${STACK_VERSION}
+    container_name: elasticsearch
+    environment:
+      - cluster.name=elk-ecommerce
+      - discovery.type=single-node
+      - xpack.security.enabled=false   # projet de démo : pas d'authentification
+      - bootstrap.memory_lock=true
+      - ES_JAVA_OPTS=-Xms${ES_HEAP} -Xmx${ES_HEAP}
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:${STACK_VERSION}
+    container_name: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:5601/api/status | grep -q '\"level\":\"available\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 40
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:${STACK_VERSION}
+    container_name: logstash
+    environment:
+      - LS_JAVA_OPTS=-Xms${LS_HEAP} -Xmx${LS_HEAP}
+    volumes:
+      - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+      - ./logstash/pipeline:/usr/share/logstash/pipeline:ro
+    ports:
+      - "5044:5044"   # input Beats
+      - "9600:9600"   # API de monitoring Logstash
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/5044' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  # Conteneur one-shot : template d'index + data view Kibana
+  setup:
+    image: curlimages/curl:8.10.1
+    container_name: elk-setup
+    volumes:
+      - ./setup:/setup:ro
+    entrypoint: ["sh", "/setup/setup.sh"]
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      kibana:
+        condition: service_healthy
+    restart: "no"
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:${STACK_VERSION}
+    container_name: filebeat
+    user: root
+    command: ["filebeat", "-e", "--strict.perms=false"]
+    volumes:
+      - ./filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - ./logs:/logs:ro
+      - filebeat-data:/usr/share/filebeat/data
+    depends_on:
+      logstash:
+        condition: service_healthy
+
+  log-generator:
+    build: ./generator
+    container_name: log-generator
+    environment:
+      - GENERATOR_RATE=${GENERATOR_RATE}
+      - GENERATOR_BACKFILL_HOURS=${GENERATOR_BACKFILL_HOURS}
+      - LOG_FILE=/logs/ecommerce.log
+    volumes:
+      - ./logs:/logs
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  es-data:
+  filebeat-data:

@@ -1,0 +1,4 @@
+api.http.host: "0.0.0.0"
+# Noms de champs "classiques" (geoip.*, ua.*) plutôt que le schéma ECS, plus simple pour la démo
+pipeline.ecs_compatibility: disabled
+xpack.monitoring.enabled: false

@@ -1,0 +1,13 @@
+filebeat.inputs:
+  - type: filestream
+    id: ecommerce-logs
+    paths:
+      - /logs/ecommerce.log
+    fields:
+      platform: shopnow
+    fields_under_root: true
+
+output.logstash:
+  hosts: ["logstash:5044"]
+
+logging.level: info
